@@ -21,7 +21,7 @@ if (file_exists(FILE_PATH . 'savedata')) {
         //中央3ビット [風上下] 自動：0 最上：1 上：2 中：3 下：4 最上：5 回転：7
         //下位3ビット [風速] 弱：1 中：2 強、パワフル：3
         '10' => 0x00, //固定値
-        '11' => 0x00, //固定値
+        '11' => 0x00, //タイマー 00:タイマーなし 03:30分 06:1時間 09:2時間
         '12' => 0x00, //固定値
         '13' => 0x00, //風エリア 風左右：0x00 左半分：0x40 右半分：0xC0
         '14' => 0x0e, //内部クリーン 入:0x0e 切：0x10
@@ -111,15 +111,15 @@ function GetOption()
         6 => '冷房'
     ][$bytes[8] & 15];
     $sound = [
+        "あり",
         "なし",
-        "あり"
     ][$bytes[9] & 63];
     print "モード:{$mode}\n";
     if ($bytes[6] == 80 || $bytes[6] == 16) {
         print "除湿強度:{$dryintensity}\n";
     } else {
 
-        print "設定温度:" . ($bytes[7] + 16) . "℃\n";
+        print "設定温度:" . ($bytes[7] + 16) . "度\n";
     }
     print "風速:{$speed}\n";
     print "風エリア:{$area}\n";
@@ -157,19 +157,19 @@ function GetOption2()
         6 => '冷房'
     ][$bytes[8] & 15];
     $sound = [
-        "なし",
-        "あり"
+        "あり",
+        "なし"
     ][$bytes[9] & 63];
-    print "モードは{$mode}。\n";
+    print "モードは{$mode}。<br>";
     if ($bytes[6] == 80 || $bytes[6] == 16) {
-        print "除湿強度は{$dryintensity}。\n";
+        print "除湿強度は{$dryintensity}。<br>";
     } else {
 
-        print "設定温度は" . ($bytes[7] + 16) . "℃。\n";
+        print "設定温度は" . ($bytes[7] + 16) . "度。<br>";
     }
-    print "風速は{$speed}。\n";
-    print "風エリアは{$area}。\n";
-    print "音は{$sound}。\n";
+    print "風速は{$speed}。<br>";
+    // print "風エリアは{$area}。<br>";
+    // print "音は{$sound}。<br>";
 }
 
 function GetHelp()
@@ -345,6 +345,29 @@ if (@$_SERVER["REQUEST_METHOD"] == "GET") {
     if (strpos($w, '消') !== false) {
         SetPower(0);
     } else {
+        if (strpos($w, 'タイマ') !== false) {
+            preg_match('/(\d+)/', $w, $time);
+            switch ($time[0]) {
+                case '30':
+                    $byte[11] =0x03;
+                    print('タイマーが30分にセットされました');
+                    break;
+                case '1':
+                    $byte[11] =0x06;
+                    print('タイマーが1時間にセットされました');
+                    break;
+            }
+        }
+
+        else if (preg_match('/(\d+)[度|℃]/', $w, $match)) {
+            if ($bytes[6] == 0x58 || $bytes[6] == 0x18 || $bytes[6] == 0x48 || $bytes[6] == 0x08) {
+                $temp = $bytes[7];
+                $bytes[7] = $match[1] - 16;
+                print "温度が" . ($temp + 16) . "度から" . ($bytes[7] + 16) . "度に変更されました。<br>";
+            } else {
+                print "現在除湿運転をしているので、温度設定はできません。";
+            }
+        }
 
         if (strpos($w, '状態') !== false) {
             GetOption2();
@@ -352,54 +375,46 @@ if (@$_SERVER["REQUEST_METHOD"] == "GET") {
         }
         if (strpos($w, '除湿') !== false) {
             SetMode('dry');
-            print "除湿運転を開始します。\n";
+            print "除湿運転を開始します。<br>";
             $query['m'] = 'dry';
         } else if (strpos($w, '暖房') !== false) {
-            print "暖房運転を開始します。\n";
+            print "暖房運転を開始します。<br>";
             SetMode('heat');
             $query['m'] = 'heat';
         } else if (strpos($w, '冷房') !== false) {
-            print "冷房運転を開始します。\n";
+            print "冷房運転を開始します。<br>";
             SetMode('cool');
             $query['m'] = 'cool';
         }
         if (strpos($w, '下げ') !== false || strpos($w, '暑い') !== false) {
-
-            $bytes[7]--;
-            print "温度が" . ($bytes[7] + 16) . "℃に変更されました。\n";
+            if ($bytes[6] == 0x58 || $bytes[6] == 0x18 || $bytes[6] == 0x48 || $bytes[6] == 0x08) {
+                $bytes[7]--;
+                print "温度が" . ($bytes[7] + 16) . "度に変更されました。<br>";
+            } else {
+                SetDryIntensity('h');
+                print "除湿強度が強めに変更されました。<br>";
+            }
         } else if (strpos($w, '上げ') !== false || strpos($w, '寒い') !== false) {
-            $bytes[7]++;
-            print "温度が" . ($bytes[7] + 16) . "℃に変更されました。\n";
+            if ($bytes[6] == 0x58 || $bytes[6] == 0x18 || $bytes[6] == 0x48 || $bytes[6] == 0x08) {
+                $bytes[7]++;
+                print "温度が" . ($bytes[7] + 16) . "度に変更されました。<br>";
+            } else {
+                SetDryIntensity('l');
+                print "除湿強度が弱めに変更されました。<br>";
+            }
         }
         if (strpos($w, '強') !== false) {
             SetDryIntensity('h');
-            print "除湿強度が強めに変更されました。\n";
+            print "除湿強度が強めに変更されました。<br>";
         } else if (strpos($w, '普通') !== false) {
             SetDryIntensity('n');
-            print "除湿強度が普通に変更されました。\n";
+            print "除湿強度が普通に変更されました。<br>";
         } else if (strpos($w, '弱') !== false) {
             SetDryIntensity('l');
-            print "除湿強度が弱めに変更されました。\n";
+            print "除湿強度が弱めに変更されました。<br>";
         }
-        // if (strpos($w, '後') !== false) {
-        //     preg_match('/(\d+)/',$w,$match);
-        //     // print_r($match[0]);
-        //     if (strpos($w, '秒') !== false) {
-        //         exec("php timer.php ".$match[0]);
-
-        //     }else if (strpos($w, '分') !== false) {
-        //         sleep($match[0]*60);
-        //     }else if (strpos($w, '時間') !== false) {
-        //         sleep($match[0]*60*60);
-        //     }
-            
-            
-        // }
-
-        // var_dump($bytes);
-        GetOption2();
     }
-} elseif (count($argv) == 1) {
+} else if (count($argv) == 1) {
     $bytes = unserialize(file_get_contents(FILE_PATH . 'savedata'));
 } else {
     for ($i = 1; $i < count($argv);) {
@@ -462,7 +477,7 @@ if (@$_SERVER["REQUEST_METHOD"] == "GET") {
     }
 }
 
-aeha(430, $bytes, 1, 1330);
+// aeha(430, $bytes, 1, 1330);
 print "\n";
 
 
